@@ -1,0 +1,117 @@
+---
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy of
+# this software and associated documentation files (the "Software"), to deal in
+# the Software without restriction, including without limitation the rights to
+# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+# the Software, and to permit persons to whom the Software is furnished to do so.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudFormation template to deploy Transfer for SFTP with a custom authorizor.
+
+Parameters:
+  StackId:
+    Description: Stack identifier
+    Type: String
+
+Resources:
+  PublicBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: !Sub
+        - ${StackId}-public-bucket
+        - StackId: !Ref StackId
+
+  SubscribedBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: !Sub
+        - ${StackId}-subscribe-bucket
+        - StackId: !Ref StackId
+
+  SampleData:
+    Type: "Custom::SampleData"
+    Properties:
+      ServiceToken: !GetAtt SampleDataLambda.Arn
+    DependsOn:
+      - PublicBucket
+      - SubscribedBucket
+
+  SampleDataLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      Policies:
+        - PolicyName: SampleDataBucketFullAccess
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - "s3:*"
+                Effect: "Allow"
+                Resource:
+                  - !GetAtt SubscribedBucket.Arn
+                  - !GetAtt PublicBucket.Arn
+                  - !Sub "${SubscribedBucket.Arn}/*"
+                  - !Sub "${PublicBucket.Arn}/*"
+            Version: "2012-10-17"
+
+  SampleDataLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code: ../src/datagen
+      Description: "A function to create sample data in the associated S3 buckets"
+      Handler: lambda_function.handler
+      Role: !GetAtt SampleDataLambdaRole.Arn
+      Runtime: "python3.7"
+      Environment:
+        Variables:
+          public_research: !Ref PublicBucket
+          subscriptions: !Ref SubscribedBucket
+
+  SftpIdp:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: sftp_idp.yaml
+      Parameters:
+        PublicBucket: !Ref PublicBucket
+        SubscribedBucket: !Ref SubscribedBucket
+
+  SftpServer:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: sftp_server.yaml
+      Parameters:
+        IdpInvocationRole: !GetAtt
+          - SftpIdp
+          - Outputs.TransferIdentityProviderInvocationRole
+        IdpUrl: !GetAtt
+          - SftpIdp
+          - Outputs.TransferIdentityProviderUrl
+
+Outputs:
+  SftpServerId:
+    Description: SFTP Server ID
+    Value: !GetAtt "SftpServer.Outputs.SftpServerId"
+  SftpIdpLambda:
+    Description: SFTP IDP Lambda handler
+    Value: !GetAtt "SftpIdp.Outputs.LambdaName"
