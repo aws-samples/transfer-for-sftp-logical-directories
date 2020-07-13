@@ -148,7 +148,7 @@ Parameters:
       "Handler": lambda.handler
       "Role":
         "Fn::GetAtt": "LambdaExecutionRole.Arn"
-      "Runtime": "nodejs8.10"
+      "Runtime": "nodejs12.x"
       Environment:
         Variables:
           PUBLIC_BUCKET: !Ref PublicBucket
