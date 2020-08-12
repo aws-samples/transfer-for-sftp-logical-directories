@@ -153,8 +153,7 @@ Parameters:
         Variables:
           PUBLIC_BUCKET: !Ref PublicBucket
           SUBSCRIBE_BUCKET: !Ref SubscribedBucket
-          USER_ROLE: 
-            !GetAtt "TransferUserRole.Arn"
+          USER_ROLE: !GetAtt TransferUserRole.Arn
 
   "GetUserConfigLambdaPermission":
     "Type": "AWS::Lambda::Permission"
