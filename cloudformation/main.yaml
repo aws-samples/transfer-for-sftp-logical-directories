@@ -21,6 +21,7 @@ Parameters:
   StackId:
     Description: Stack identifier
     Type: String
+     "AllowedPattern" : "[a-zA-Z0-9]+"
 
 Resources:
   PublicBucket:
